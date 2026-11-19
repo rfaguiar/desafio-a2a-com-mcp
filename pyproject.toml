@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "desafio-a2a-com-mcp"
+version = "0.1.0"
+description = "Servidor MCP e agente A2A do desafio A Ponte"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+]
+
+[project.scripts]
+ponte-mcp = "servidor_mcp.main:main"
+ponte-agente = "agente.main:main"
+
+[tool.setuptools]
+packages = ["servidor_mcp", "agente"]
+package-dir = {servidor_mcp = "servidor-mcp"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
