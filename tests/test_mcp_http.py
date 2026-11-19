@@ -126,3 +126,60 @@ def test_registra_metodo_id_e_traceparent_no_stderr(capsys) -> None:
     assert "method=tools/list" in log
     assert "id=17" in log
     assert f"traceparent={traceparent}" in log
+
+
+def test_resources_list_publica_a_politica() -> None:
+    corpo, headers = request("resources/list")
+
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        resposta = cliente.post("/mcp", json=corpo, headers=headers)
+
+    assert resposta.status_code == 200
+    resources = resposta.json()["result"]["resources"]
+    assert [
+        {
+            "uri": resource["uri"],
+            "mimeType": resource["mimeType"],
+        }
+        for resource in resources
+    ] == [{"uri": "politica://uso", "mimeType": "text/markdown"}]
+
+
+def test_leitura_da_politica_devolve_o_markdown_exato() -> None:
+    corpo, headers = request(
+        "resources/read", {"uri": "politica://uso"}, nome="politica://uso"
+    )
+
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        resposta = cliente.post("/mcp", json=corpo, headers=headers)
+
+    assert resposta.status_code == 200
+    resultado = resposta.json()["result"]
+    assert resultado["resultType"] == "complete"
+    assert resultado["contents"] == [
+        {
+            "uri": "politica://uso",
+            "mimeType": "text/markdown",
+            "text": (
+                "versao: 2026-11-01\n\n"
+                "- Reservas somente entre 08:00 e 20:00, horario de Sao Paulo (-03:00).\n"
+                "- Duracao maxima de 2 horas por reserva.\n"
+                "- Uma sala nao pode ter duas reservas sobrepostas.\n"
+            ),
+        }
+    ]
+
+
+def test_leitura_de_uri_desconhecida_devolve_invalid_params() -> None:
+    corpo, headers = request(
+        "resources/read",
+        {"uri": "politica://inexistente"},
+        nome="politica://inexistente",
+    )
+
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        resposta = cliente.post("/mcp", json=corpo, headers=headers)
+
+    assert resposta.status_code == 400
+    assert resposta.json()["error"]["code"] == -32602
+    assert "contents" not in resposta.json().get("result", {})

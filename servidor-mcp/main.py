@@ -109,6 +109,15 @@ def criar_servidor() -> MCPServer:
             ]
         )
 
+    @servidor.resource(
+        "politica://uso",
+        name="politica-de-uso",
+        description="Politica de uso das salas de reuniao.",
+        mime_type="text/markdown",
+    )
+    def politica_de_uso() -> str:
+        return dominio.politica.texto
+
     return servidor
 
 
