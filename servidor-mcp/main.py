@@ -21,6 +21,7 @@ from .dominio import (
     reservas_em_conflito,
     validar_pedido,
 )
+from .estado import criar_seguranca_request_state
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7301
@@ -126,7 +127,11 @@ def criar_servidor() -> MCPServer:
     proximo_numero_reserva = (
         max(int(reserva.id.removeprefix("res-")) for reserva in reservas) + 1
     )
-    servidor = MCPServer("A Ponte", version="0.1.0")
+    servidor = MCPServer(
+        "A Ponte",
+        version="0.1.0",
+        request_state_security=criar_seguranca_request_state(),
+    )
 
     @servidor.tool(
         name="listar_salas",

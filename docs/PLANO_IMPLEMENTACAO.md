@@ -731,7 +731,7 @@ checks do `validar.py`: a unica aprovacao final e a execucao inteira com 36 PASS
 - [x] Etapa 04 — resource `politica://uso`.
 - [x] Etapa 05 — consulta de disponibilidade.
 - [x] Etapa 06 — reserva no caminho livre.
-- [ ] Etapa 07 — protecao do `requestState`.
+- [x] Etapa 07 — protecao do `requestState`.
 - [ ] Etapa 08 — ciclo MRTR da reserva.
 - [ ] Etapa 09 — cliente MCP do agente.
 - [ ] Etapa 10 — Agent Card e Task A2A basica.

@@ -9,6 +9,11 @@ PROTOCOLO = "2026-07-28"
 CAPABILITIES = {"elicitation": {"form": {}}}
 
 
+@pytest.fixture(autouse=True)
+def request_state_secret(monkeypatch) -> None:
+    monkeypatch.setenv("REQUEST_STATE_SECRET", "test-key-" + ("x" * 32))
+
+
 def request(
     method: str,
     params: dict | None = None,
