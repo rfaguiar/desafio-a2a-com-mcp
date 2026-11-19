@@ -55,9 +55,22 @@ def test_tools_list_publica_apenas_listar_salas_com_schemas() -> None:
 
     assert resposta.status_code == 200
     tools = resposta.json()["result"]["tools"]
-    assert [tool["name"] for tool in tools] == ["listar_salas"]
-    assert tools[0]["inputSchema"]["type"] == "object"
-    assert tools[0]["outputSchema"]["properties"]["salas"]["type"] == "array"
+    assert {tool["name"] for tool in tools} == {
+        "consultar_disponibilidade",
+        "listar_salas",
+    }
+    assert all(tool["inputSchema"]["type"] == "object" for tool in tools)
+    tools_por_nome = {tool["name"]: tool for tool in tools}
+    assert (
+        tools_por_nome["listar_salas"]["outputSchema"]["properties"]["salas"]["type"]
+        == "array"
+    )
+    assert (
+        tools_por_nome["consultar_disponibilidade"]["outputSchema"]["properties"][
+            "livre"
+        ]["type"]
+        == "boolean"
+    )
 
 
 def test_listar_salas_devolve_as_cinco_salas_em_texto_e_estruturado() -> None:
@@ -183,3 +196,93 @@ def test_leitura_de_uri_desconhecida_devolve_invalid_params() -> None:
     assert resposta.status_code == 400
     assert resposta.json()["error"]["code"] == -32602
     assert "contents" not in resposta.json().get("result", {})
+
+
+def consultar(sala: str, inicio: str, fim: str) -> tuple[int, dict]:
+    corpo, headers = request(
+        "tools/call",
+        {
+            "name": "consultar_disponibilidade",
+            "arguments": {"sala": sala, "inicio": inicio, "fim": fim},
+        },
+        nome="consultar_disponibilidade",
+    )
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        resposta = cliente.post("/mcp", json=corpo, headers=headers)
+    return resposta.status_code, resposta.json()["result"]
+
+
+def test_consultar_disponibilidade_devolve_intervalo_livre() -> None:
+    status, resultado = consultar(
+        "sala-aquario",
+        "2026-11-03T09:00:00-03:00",
+        "2026-11-03T10:00:00-03:00",
+    )
+
+    assert status == 200
+    assert resultado["structuredContent"] == {
+        "sala": "sala-aquario",
+        "livre": True,
+        "conflitos": [],
+    }
+    assert json.loads(resultado["content"][0]["text"]) == resultado["structuredContent"]
+
+
+def test_consultar_disponibilidade_devolve_conflito_da_sala() -> None:
+    _, resultado = consultar(
+        "sala-garagem",
+        "2026-11-03T14:30:00-03:00",
+        "2026-11-03T15:30:00-03:00",
+    )
+
+    assert resultado["structuredContent"] == {
+        "sala": "sala-garagem",
+        "livre": False,
+        "conflitos": [
+            {
+                "id": "res-0001",
+                "inicio": "2026-11-03T14:00:00-03:00",
+                "fim": "2026-11-03T15:00:00-03:00",
+                "responsavel": "Marty",
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("sala", "inicio", "fim", "mensagem"),
+    [
+        (
+            "sala-delorean",
+            "2026-11-03T09:00:00-03:00",
+            "2026-11-03T10:00:00-03:00",
+            "Sala inexistente: sala-delorean",
+        ),
+        (
+            "sala-aquario",
+            "2026-11-03T07:00:00-03:00",
+            "2026-11-03T08:00:00-03:00",
+            "Fora da janela de uso: a politica permite reservas entre 08:00 e 20:00",
+        ),
+        (
+            "sala-aquario",
+            "2026-11-03T09:00:00-03:00",
+            "2026-11-03T12:00:00-03:00",
+            "Duracao acima do limite: a politica permite no maximo 2 horas",
+        ),
+        (
+            "sala-aquario",
+            "2026-11-03T10:00:00-03:00",
+            "2026-11-03T09:00:00-03:00",
+            "Intervalo invalido: fim deve ser posterior a inicio",
+        ),
+    ],
+)
+def test_consultar_disponibilidade_devolve_erros_como_is_error(
+    sala: str, inicio: str, fim: str, mensagem: str
+) -> None:
+    status, resultado = consultar(sala, inicio, fim)
+
+    assert status == 200
+    assert resultado["isError"] is True
+    assert mensagem in resultado["content"][0]["text"]

@@ -9,10 +9,16 @@ from typing import Any
 
 import uvicorn
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .dominio import carregar_dominio
+from .dominio import (
+    ErroDominio,
+    carregar_dominio,
+    reservas_em_conflito,
+    validar_pedido,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7301
@@ -28,6 +34,19 @@ class SalaOut(BaseModel):
 
 class ListaDeSalas(BaseModel):
     salas: list[SalaOut]
+
+
+class ConflitoOut(BaseModel):
+    id: str
+    inicio: str
+    fim: str
+    responsavel: str
+
+
+class Disponibilidade(BaseModel):
+    sala: str
+    livre: bool
+    conflitos: list[ConflitoOut]
 
 
 class RegistroRequests:
@@ -107,6 +126,34 @@ def criar_servidor() -> MCPServer:
                 )
                 for sala in dominio.salas
             ]
+        )
+
+    @servidor.tool(
+        name="consultar_disponibilidade",
+        description="Diz se uma sala esta livre no intervalo, e quais reservas conflitam.",
+    )
+    def consultar_disponibilidade(
+        sala: str, inicio: str, fim: str
+    ) -> Disponibilidade:
+        try:
+            sala_validada = validar_pedido(sala, inicio, fim, dominio.salas)
+        except ErroDominio as erro:
+            raise ToolError(str(erro)) from erro
+        conflitos = reservas_em_conflito(
+            sala_validada.id, inicio, fim, dominio.reservas
+        )
+        return Disponibilidade(
+            sala=sala_validada.id,
+            livre=not conflitos,
+            conflitos=[
+                ConflitoOut(
+                    id=reserva.id,
+                    inicio=reserva.inicio,
+                    fim=reserva.fim,
+                    responsavel=reserva.responsavel,
+                )
+                for reserva in conflitos
+            ],
         )
 
     @servidor.resource(
