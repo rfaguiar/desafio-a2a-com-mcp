@@ -722,3 +722,19 @@ checks do `validar.py`: a unica aprovacao final e a execucao inteira com 36 PASS
 - [ ] Validador termina com codigo 0 e 36 PASS.
 - [ ] README foi validado literalmente a partir de uma pasta limpa.
 - [ ] A branch `main` do fork publico contem toda a entrega.
+
+## 10. Status de execucao
+
+- [x] Etapa 01 — ambiente Python, lock, testes e spike do SDK.
+- [x] Etapa 02 — modelos, carregamento e validacao deterministica do dominio.
+- [x] Etapa 03 — servidor MCP Streamable HTTP e descoberta de `listar_salas`.
+- [ ] Etapa 04 — resource `politica://uso`.
+- [ ] Etapa 05 — consulta de disponibilidade.
+- [ ] Etapa 06 — reserva no caminho livre.
+- [ ] Etapa 07 — protecao do `requestState`.
+- [ ] Etapa 08 — ciclo MRTR da reserva.
+- [ ] Etapa 09 — cliente MCP do agente.
+- [ ] Etapa 10 — Agent Card e Task A2A basica.
+- [ ] Etapa 11 — costura MRTR com Tasks A2A.
+- [ ] Etapa 12 — documentacao e prova da operacao completa.
+- [ ] Etapa 13 — validacao da entrega publica final.

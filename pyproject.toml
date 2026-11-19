@@ -9,6 +9,9 @@ description = "Servidor MCP e agente A2A do desafio A Ponte"
 requires-python = ">=3.10"
 dependencies = [
     "mcp==2.3.0",
+    "pydantic==2.14.4",
+    "starlette==1.7.0",
+    "uvicorn==0.54.0",
 ]
 
 [project.optional-dependencies]
