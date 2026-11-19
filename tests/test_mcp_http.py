@@ -58,6 +58,7 @@ def test_tools_list_publica_apenas_listar_salas_com_schemas() -> None:
     assert {tool["name"] for tool in tools} == {
         "consultar_disponibilidade",
         "listar_salas",
+        "reservar_sala",
     }
     assert all(tool["inputSchema"]["type"] == "object" for tool in tools)
     tools_por_nome = {tool["name"]: tool for tool in tools}
@@ -286,3 +287,88 @@ def test_consultar_disponibilidade_devolve_erros_como_is_error(
     assert status == 200
     assert resultado["isError"] is True
     assert mensagem in resultado["content"][0]["text"]
+
+
+def reservar(
+    cliente: TestClient,
+    sala: str,
+    inicio: str,
+    fim: str,
+    responsavel: str = "Doc",
+) -> tuple[int, dict]:
+    corpo, headers = request(
+        "tools/call",
+        {
+            "name": "reservar_sala",
+            "arguments": {
+                "sala": sala,
+                "inicio": inicio,
+                "fim": fim,
+                "responsavel": responsavel,
+            },
+        },
+        nome="reservar_sala",
+    )
+    resposta = cliente.post("/mcp", json=corpo, headers=headers)
+    return resposta.status_code, resposta.json()["result"]
+
+
+def consultar_na_aplicacao(
+    cliente: TestClient, sala: str, inicio: str, fim: str
+) -> dict:
+    corpo, headers = request(
+        "tools/call",
+        {
+            "name": "consultar_disponibilidade",
+            "arguments": {"sala": sala, "inicio": inicio, "fim": fim},
+        },
+        nome="consultar_disponibilidade",
+    )
+    resposta = cliente.post("/mcp", json=corpo, headers=headers)
+    return resposta.json()["result"]
+
+
+def test_reserva_livre_gera_id_e_fica_visivel_na_mesma_instancia() -> None:
+    inicio = "2026-11-03T09:00:00-03:00"
+    fim = "2026-11-03T10:00:00-03:00"
+
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        status, resultado = reservar(cliente, "sala-aquario", inicio, fim)
+        disponibilidade = consultar_na_aplicacao(
+            cliente, "sala-aquario", inicio, fim
+        )
+
+    assert status == 200
+    assert resultado["resultType"] == "complete"
+    assert resultado["structuredContent"] == {
+        "reserva": "res-0003",
+        "reservado": True,
+        "sala": "sala-aquario",
+        "inicio": inicio,
+        "fim": fim,
+        "responsavel": "Doc",
+        "politica": "2026-11-01",
+        "motivo": None,
+    }
+    assert json.loads(resultado["content"][0]["text"]) == resultado["structuredContent"]
+    assert disponibilidade["structuredContent"]["livre"] is False
+    assert disponibilidade["structuredContent"]["conflitos"][0]["id"] == "res-0003"
+
+
+def test_reserva_sem_alternativas_devolve_erro_de_execucao() -> None:
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        reservar(
+            cliente,
+            "sala-mirante",
+            "2026-11-03T11:00:00-03:00",
+            "2026-11-03T12:00:00-03:00",
+        )
+        _, resultado = reservar(
+            cliente,
+            "sala-mirante",
+            "2026-11-03T11:00:00-03:00",
+            "2026-11-03T12:00:00-03:00",
+        )
+
+    assert resultado["isError"] is True
+    assert "Sem alternativas disponiveis no intervalo" in resultado["content"][0]["text"]

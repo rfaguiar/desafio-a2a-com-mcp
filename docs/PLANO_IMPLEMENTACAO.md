@@ -730,7 +730,7 @@ checks do `validar.py`: a unica aprovacao final e a execucao inteira com 36 PASS
 - [x] Etapa 03 — servidor MCP Streamable HTTP e descoberta de `listar_salas`.
 - [x] Etapa 04 — resource `politica://uso`.
 - [x] Etapa 05 — consulta de disponibilidade.
-- [ ] Etapa 06 — reserva no caminho livre.
+- [x] Etapa 06 — reserva no caminho livre.
 - [ ] Etapa 07 — protecao do `requestState`.
 - [ ] Etapa 08 — ciclo MRTR da reserva.
 - [ ] Etapa 09 — cliente MCP do agente.

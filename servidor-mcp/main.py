@@ -15,6 +15,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .dominio import (
     ErroDominio,
+    Reserva,
+    alternativas_disponiveis,
     carregar_dominio,
     reservas_em_conflito,
     validar_pedido,
@@ -47,6 +49,17 @@ class Disponibilidade(BaseModel):
     sala: str
     livre: bool
     conflitos: list[ConflitoOut]
+
+
+class ResultadoReserva(BaseModel):
+    reserva: str | None
+    reservado: bool
+    sala: str | None
+    inicio: str
+    fim: str
+    responsavel: str
+    politica: str
+    motivo: str | None
 
 
 class RegistroRequests:
@@ -109,6 +122,10 @@ class RegistroRequests:
 
 def criar_servidor() -> MCPServer:
     dominio = carregar_dominio()
+    reservas = list(dominio.reservas)
+    proximo_numero_reserva = (
+        max(int(reserva.id.removeprefix("res-")) for reserva in reservas) + 1
+    )
     servidor = MCPServer("A Ponte", version="0.1.0")
 
     @servidor.tool(
@@ -140,7 +157,7 @@ def criar_servidor() -> MCPServer:
         except ErroDominio as erro:
             raise ToolError(str(erro)) from erro
         conflitos = reservas_em_conflito(
-            sala_validada.id, inicio, fim, dominio.reservas
+            sala_validada.id, inicio, fim, reservas
         )
         return Disponibilidade(
             sala=sala_validada.id,
@@ -154,6 +171,48 @@ def criar_servidor() -> MCPServer:
                 )
                 for reserva in conflitos
             ],
+        )
+
+    @servidor.tool(
+        name="reservar_sala",
+        description="Cria uma reserva quando a sala esta livre.",
+    )
+    def reservar_sala(
+        sala: str, inicio: str, fim: str, responsavel: str
+    ) -> ResultadoReserva:
+        nonlocal proximo_numero_reserva
+        try:
+            sala_validada = validar_pedido(sala, inicio, fim, dominio.salas)
+        except ErroDominio as erro:
+            raise ToolError(str(erro)) from erro
+
+        conflitos = reservas_em_conflito(sala_validada.id, inicio, fim, reservas)
+        if conflitos:
+            alternativas = alternativas_disponiveis(
+                sala_validada, inicio, fim, dominio.salas, reservas
+            )
+            if not alternativas:
+                raise ToolError("Sem alternativas disponiveis no intervalo")
+            raise ToolError("A sala pedida esta ocupada nesse intervalo")
+
+        reserva = Reserva(
+            id=f"res-{proximo_numero_reserva:04d}",
+            sala=sala_validada.id,
+            inicio=inicio,
+            fim=fim,
+            responsavel=responsavel,
+        )
+        proximo_numero_reserva += 1
+        reservas.append(reserva)
+        return ResultadoReserva(
+            reserva=reserva.id,
+            reservado=True,
+            sala=reserva.sala,
+            inicio=reserva.inicio,
+            fim=reserva.fim,
+            responsavel=reserva.responsavel,
+            politica=dominio.politica.versao,
+            motivo=None,
         )
 
     @servidor.resource(
