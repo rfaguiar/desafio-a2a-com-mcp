@@ -13,8 +13,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from .mcp_client import ClienteMcp, ErroMcp
-from .mensagens import parse_reserva, texto_da_mensagem
-from .tarefas import Tarefas, novo_id
+from .mensagens import parse_escolha, parse_reserva, texto_da_mensagem
+from .tarefas import EstadoPrivadoTask, Tarefas, Task, novo_id
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7300
@@ -83,6 +83,78 @@ def _rpc_error(request_id: Any, code: int, message: str) -> JSONResponse:
     )
 
 
+def _aplicar_resultado_mcp(
+    task: Task,
+    resultado: dict[str, Any],
+    cliente: Any,
+) -> None:
+    if resultado.get("resultType") == "input_required":
+        pedidos = resultado.get("inputRequests") or {}
+        request_state = resultado.get("requestState")
+        if len(pedidos) != 1 or not isinstance(request_state, str):
+            task.transicionar("TASK_STATE_FAILED", "Resposta input_required invalida")
+            return
+        input_key, pedido = next(iter(pedidos.items()))
+        propriedades = (
+            ((pedido.get("params") or {}).get("requestedSchema") or {})
+            .get("properties")
+            or {}
+        )
+        campo = propriedades.get("sala") or {}
+        alternativas = campo.get("enum")
+        if alternativas is None and "const" in campo:
+            alternativas = [campo["const"]]
+        if not isinstance(alternativas, list) or not all(
+            isinstance(item, str) for item in alternativas
+        ):
+            task.transicionar(
+                "TASK_STATE_FAILED", "Elicitation sem alternativas validas"
+            )
+            return
+        task.private.input_key = input_key
+        task.private.alternativas = alternativas
+        task.private.request_state = request_state
+        task.transicionar(
+            "TASK_STATE_INPUT_REQUIRED",
+            f"alternativas: {', '.join(alternativas)}",
+        )
+        return
+
+    if resultado.get("isError"):
+        task.transicionar("TASK_STATE_FAILED", _texto_resultado(resultado))
+        task.private = EstadoPrivadoTask()
+        return
+    if resultado.get("resultType") != "complete":
+        task.transicionar("TASK_STATE_FAILED", "Resposta MCP inesperada")
+        task.private = EstadoPrivadoTask()
+        return
+    estruturado = resultado.get("structuredContent") or {}
+    if estruturado.get("reservado") is False:
+        task.transicionar("TASK_STATE_CANCELED", "Reserva recusada.")
+        task.private = EstadoPrivadoTask()
+        return
+    reserva = {
+        "reserva": estruturado.get("reserva"),
+        "sala": estruturado.get("sala"),
+        "inicio": estruturado.get("inicio"),
+        "fim": estruturado.get("fim"),
+        "responsavel": estruturado.get("responsavel"),
+        "politica": cliente.versao_politica,
+    }
+    task.artifacts.append(
+        {
+            "artifactId": novo_id("art"),
+            "name": "reserva",
+            "parts": [{"text": json.dumps(reserva)}],
+        }
+    )
+    task.transicionar(
+        "TASK_STATE_COMPLETED",
+        f"Reserva {reserva['reserva']} confirmada na {reserva['sala']}.",
+    )
+    task.private = EstadoPrivadoTask()
+
+
 def criar_aplicacao(cliente_mcp: Any | None = None) -> Starlette:
     tarefas = Tarefas()
     cliente = cliente_mcp or ClienteMcp(
@@ -136,10 +208,63 @@ def criar_aplicacao(cliente_mcp: Any | None = None) -> Starlette:
                     request_id, -32602, "Task terminal nao pode ser continuada"
                 )
             task.history.append(mensagem)
-            task.transicionar(
-                "TASK_STATE_WORKING",
-                "Continuacao ainda nao suportada nesta etapa",
-            )
+            try:
+                escolha = parse_escolha(texto_da_mensagem(mensagem))
+            except ValueError:
+                escolha = ""
+            if task.state != "TASK_STATE_INPUT_REQUIRED" or (
+                escolha != "recusar" and escolha not in task.private.alternativas
+            ):
+                task.transicionar(
+                    "TASK_STATE_INPUT_REQUIRED",
+                    f"alternativas: {', '.join(task.private.alternativas)}",
+                )
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {"task": task.como_publica()},
+                    }
+                )
+            task.transicionar("TASK_STATE_WORKING")
+            input_key = task.private.input_key
+            request_state = task.private.request_state
+            argumentos = task.private.argumentos_originais
+            traceparent = task.private.traceparent
+            if (
+                input_key is None
+                or request_state is None
+                or argumentos is None
+            ):
+                task.transicionar("TASK_STATE_FAILED", "Estado privado incompleto")
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {"task": task.como_publica()},
+                    }
+                )
+            input_response: dict[str, Any]
+            if escolha == "recusar":
+                input_response = {"action": "decline"}
+            else:
+                input_response = {
+                    "action": "accept",
+                    "content": {"sala": escolha},
+                }
+            try:
+                resultado = cliente.chamar_tool(
+                    "reservar_sala",
+                    argumentos,
+                    input_responses={input_key: input_response},
+                    request_state=request_state,
+                    traceparent=traceparent,
+                )
+            except ErroMcp as erro:
+                task.transicionar("TASK_STATE_FAILED", str(erro))
+                task.private = EstadoPrivadoTask()
+            else:
+                _aplicar_resultado_mcp(task, resultado, cliente)
             return JSONResponse(
                 {
                     "jsonrpc": "2.0",
@@ -164,36 +289,7 @@ def criar_aplicacao(cliente_mcp: Any | None = None) -> Starlette:
         except ErroMcp as erro:
             task.transicionar("TASK_STATE_FAILED", str(erro))
         else:
-            if resultado.get("isError"):
-                task.transicionar(
-                    "TASK_STATE_FAILED", _texto_resultado(resultado)
-                )
-            elif resultado.get("resultType") == "complete":
-                estruturado = resultado.get("structuredContent") or {}
-                reserva = {
-                    "reserva": estruturado.get("reserva"),
-                    "sala": estruturado.get("sala"),
-                    "inicio": estruturado.get("inicio"),
-                    "fim": estruturado.get("fim"),
-                    "responsavel": estruturado.get("responsavel"),
-                    "politica": cliente.versao_politica,
-                }
-                task.artifacts.append(
-                    {
-                        "artifactId": novo_id("art"),
-                        "name": "reserva",
-                        "parts": [{"text": json.dumps(reserva)}],
-                    }
-                )
-                task.transicionar(
-                    "TASK_STATE_COMPLETED",
-                    f"Reserva {reserva['reserva']} confirmada na {reserva['sala']}.",
-                )
-            else:
-                task.transicionar(
-                    "TASK_STATE_FAILED",
-                    "Resposta MCP inesperada pelo caminho sincrono",
-                )
+            _aplicar_resultado_mcp(task, resultado, cliente)
         return JSONResponse(
             {
                 "jsonrpc": "2.0",

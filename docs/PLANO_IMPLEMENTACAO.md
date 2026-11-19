@@ -735,6 +735,6 @@ checks do `validar.py`: a unica aprovacao final e a execucao inteira com 36 PASS
 - [x] Etapa 08 — ciclo MRTR da reserva.
 - [x] Etapa 09 — cliente MCP do agente.
 - [x] Etapa 10 — Agent Card e Task A2A basica.
-- [ ] Etapa 11 — costura MRTR com Tasks A2A.
+- [x] Etapa 11 — costura MRTR com Tasks A2A.
 - [ ] Etapa 12 — documentacao e prova da operacao completa.
 - [ ] Etapa 13 — validacao da entrega publica final.

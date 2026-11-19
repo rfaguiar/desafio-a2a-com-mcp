@@ -33,3 +33,12 @@ def parse_reserva(texto: str) -> dict[str, str]:
         "fim": fim,
         "responsavel": responsavel.strip(),
     }
+
+
+def parse_escolha(texto: str) -> str:
+    if not texto.startswith("escolha=") or "\n" in texto:
+        raise ValueError("Formato de escolha invalido")
+    escolha = texto.removeprefix("escolha=")
+    if not escolha or any(caractere.isspace() for caractere in escolha):
+        raise ValueError("Formato de escolha invalido")
+    return escolha
