@@ -705,23 +705,23 @@ checks do `validar.py`: a unica aprovacao final e a execucao inteira com 36 PASS
 
 ## 9. Checklist previo ao push final
 
-- [ ] `git diff --exit-code -- dados validador exemplos` passa.
-- [ ] Dependencias exatas e instalaveis pelo lock.
-- [ ] `pytest` passa a partir de clone limpo.
-- [ ] MCP e agente estao em dois processos.
-- [ ] Portas e endpoints padrao estao corretos.
-- [ ] `REQUEST_STATE_SECRET` nao aparece no Git.
-- [ ] O segredo foi gerado conforme o README e possui ao menos 32 bytes.
-- [ ] RequestState adulterado e expirado recebem -32602.
-- [ ] Retry funciona apos restart do MCP.
-- [ ] `traceparent` aparece no stderr com o trace-id do validador.
-- [ ] Card v1.0 usa `supportedInterfaces`.
-- [ ] O retry e um novo id JSON-RPC.
-- [ ] Task terminal nao volta a `WORKING`.
-- [ ] Nenhum A2A response contem `requestState`.
-- [ ] Validador termina com codigo 0 e 36 PASS.
-- [ ] README foi validado literalmente a partir de uma pasta limpa.
-- [ ] A branch `main` do fork publico contem toda a entrega.
+- [x] `git diff --exit-code -- dados validador exemplos` passa.
+- [x] Dependencias exatas e instalaveis pelo lock.
+- [x] `pytest` passa a partir de clone limpo.
+- [x] MCP e agente estao em dois processos.
+- [x] Portas e endpoints padrao estao corretos.
+- [x] `REQUEST_STATE_SECRET` nao aparece no Git.
+- [x] O segredo foi gerado conforme o README e possui ao menos 32 bytes.
+- [x] RequestState adulterado e expirado recebem -32602.
+- [x] Retry funciona apos restart do MCP.
+- [x] `traceparent` aparece no stderr com o trace-id do validador.
+- [x] Card v1.0 usa `supportedInterfaces`.
+- [x] O retry e um novo id JSON-RPC.
+- [x] Task terminal nao volta a `WORKING`.
+- [x] Nenhum A2A response contem `requestState`.
+- [x] Validador termina com codigo 0 e 36 PASS.
+- [x] README foi validado literalmente a partir de uma pasta limpa.
+- [x] A branch `main` do fork publico contem toda a entrega.
 
 ## 10. Status de execucao
 
@@ -737,4 +737,4 @@ checks do `validar.py`: a unica aprovacao final e a execucao inteira com 36 PASS
 - [x] Etapa 10 — Agent Card e Task A2A basica.
 - [x] Etapa 11 — costura MRTR com Tasks A2A.
 - [x] Etapa 12 — documentacao e prova da operacao completa.
-- [ ] Etapa 13 — validacao da entrega publica final.
+- [x] Etapa 13 — validacao da entrega publica final.

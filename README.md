@@ -102,7 +102,7 @@ e aberto nem incluido na representacao publica da Task.
 ## Saida do validador
 
 ```text
-trace-id desta execucao: 0295465f51071ed4b85eaefd5ad7bf60
+trace-id desta execucao: 7a67671bc1d2740889349328e150d218
 procure esse valor no stderr do servidor MCP para conferir a propagacao do traceparent.
 
 PASS 01 tools/list traz as tres tools
