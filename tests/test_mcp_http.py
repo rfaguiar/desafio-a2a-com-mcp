@@ -21,10 +21,13 @@ def request(
     nome: str | None = None,
     omitido: str | None = None,
     traceparent: str | None = None,
+    capabilities: dict | None = None,
 ) -> tuple[dict, dict[str, str]]:
     meta = {
         "io.modelcontextprotocol/protocolVersion": PROTOCOLO,
-        "io.modelcontextprotocol/clientCapabilities": CAPABILITIES,
+        "io.modelcontextprotocol/clientCapabilities": (
+            CAPABILITIES if capabilities is None else capabilities
+        ),
     }
     if omitido == "protocolVersion":
         meta.pop("io.modelcontextprotocol/protocolVersion")
@@ -377,3 +380,147 @@ def test_reserva_sem_alternativas_devolve_erro_de_execucao() -> None:
 
     assert resultado["isError"] is True
     assert "Sem alternativas disponiveis no intervalo" in resultado["content"][0]["text"]
+
+
+def reservar_raw(
+    cliente: TestClient,
+    sala: str = "sala-garagem",
+    inicio: str = "2026-11-03T14:00:00-03:00",
+    fim: str = "2026-11-03T15:00:00-03:00",
+    responsavel: str = "Marty",
+    **kwargs,
+) -> tuple[int, dict]:
+    corpo, headers = request(
+        "tools/call",
+        {
+            "name": "reservar_sala",
+            "arguments": {
+                "sala": sala,
+                "inicio": inicio,
+                "fim": fim,
+                "responsavel": responsavel,
+            },
+        },
+        nome="reservar_sala",
+        **kwargs,
+    )
+    resposta = cliente.post("/mcp", json=corpo, headers=headers)
+    return resposta.status_code, resposta.json()
+
+
+def retomar_raw(
+    cliente: TestClient,
+    chave: str,
+    estado: str,
+    resposta_input: dict,
+    *,
+    sala: str = "sala-garagem",
+    inicio: str = "2026-11-03T14:00:00-03:00",
+    fim: str = "2026-11-03T15:00:00-03:00",
+    responsavel: str = "Marty",
+) -> tuple[int, dict]:
+    corpo, headers = request(
+        "tools/call",
+        {
+            "name": "reservar_sala",
+            "arguments": {
+                "sala": sala,
+                "inicio": inicio,
+                "fim": fim,
+                "responsavel": responsavel,
+            },
+            "inputResponses": {chave: resposta_input},
+            "requestState": estado,
+        },
+        nome="reservar_sala",
+    )
+    resposta = cliente.post("/mcp", json=corpo, headers=headers)
+    return resposta.status_code, resposta.json()
+
+
+def test_conflito_devolve_input_required_com_alternativas_ordenadas() -> None:
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        status, resposta = reservar_raw(cliente)
+
+    resultado = resposta["result"]
+    chave = next(iter(resultado["inputRequests"]))
+    pedido = resultado["inputRequests"][chave]
+    schema_sala = pedido["params"]["requestedSchema"]["properties"]["sala"]
+    assert status == 200
+    assert resultado["resultType"] == "input_required"
+    assert pedido["method"] == "elicitation/create"
+    assert pedido["params"]["mode"] == "form"
+    assert schema_sala["enum"] == ["sala-fusca", "sala-mirante"]
+    assert resultado["requestState"]
+
+
+def test_conflito_sem_capability_de_form_devolve_32021() -> None:
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        status, resposta = reservar_raw(cliente, capabilities={})
+
+    assert status == 400
+    assert resposta["error"]["code"] == -32021
+    assert "requiredCapabilities" in resposta["error"]["data"]
+
+
+def test_retry_aceito_conclui_na_sala_escolhida_apos_reinstancia() -> None:
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        _, pausa = reservar_raw(cliente)
+    resultado = pausa["result"]
+    chave = next(iter(resultado["inputRequests"]))
+    estado = resultado["requestState"]
+
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        status, resposta = retomar_raw(
+            cliente,
+            chave,
+            estado,
+            {"action": "accept", "content": {"sala": "sala-fusca"}},
+        )
+
+    assert status == 200
+    assert resposta["result"]["structuredContent"]["sala"] == "sala-fusca"
+    assert resposta["result"]["structuredContent"]["responsavel"] == "Marty"
+
+
+def test_retry_recusado_conclui_sem_reservar() -> None:
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        _, pausa = reservar_raw(cliente)
+        resultado = pausa["result"]
+        chave = next(iter(resultado["inputRequests"]))
+        _, resposta = retomar_raw(
+            cliente, chave, resultado["requestState"], {"action": "decline"}
+        )
+
+    assert resposta["result"]["resultType"] == "complete"
+    assert resposta["result"]["isError"] is False
+    assert resposta["result"]["structuredContent"] == {
+        "reserva": None,
+        "reservado": False,
+        "sala": None,
+        "inicio": None,
+        "fim": None,
+        "responsavel": None,
+        "politica": None,
+        "motivo": "recusado",
+    }
+
+
+def test_retry_nao_permite_argumentos_adulterados() -> None:
+    with TestClient(criar_aplicacao(), base_url="http://127.0.0.1:7301") as cliente:
+        _, pausa = reservar_raw(cliente)
+        resultado = pausa["result"]
+        chave = next(iter(resultado["inputRequests"]))
+        status, resposta = retomar_raw(
+            cliente,
+            chave,
+            resultado["requestState"],
+            {"action": "accept", "content": {"sala": "sala-fusca"}},
+            sala="sala-mirante",
+            inicio="2026-11-03T13:00:00-03:00",
+            fim="2026-11-03T14:00:00-03:00",
+            responsavel="Biff",
+        )
+
+    assert status == 400
+    assert resposta["error"]["code"] == -32602

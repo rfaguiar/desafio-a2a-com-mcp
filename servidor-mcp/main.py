@@ -9,7 +9,20 @@ from typing import Any
 
 import uvicorn
 from mcp.server import MCPServer
+from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.shared.exceptions import MCPError
+from mcp_types import (
+    INVALID_PARAMS,
+    MISSING_REQUIRED_CLIENT_CAPABILITY,
+    ClientCapabilities,
+    ElicitRequest,
+    ElicitRequestFormParams,
+    ElicitationCapability,
+    FormElicitationCapability,
+    InputRequiredResult,
+    MissingRequiredClientCapabilityErrorData,
+)
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -20,6 +33,7 @@ from .dominio import (
     carregar_dominio,
     reservas_em_conflito,
     validar_pedido,
+    validar_sala,
 )
 from .estado import criar_seguranca_request_state
 
@@ -56,10 +70,10 @@ class ResultadoReserva(BaseModel):
     reserva: str | None
     reservado: bool
     sala: str | None
-    inicio: str
-    fim: str
-    responsavel: str
-    politica: str
+    inicio: str | None
+    fim: str | None
+    responsavel: str | None
+    politica: str | None
     motivo: str | None
 
 
@@ -183,9 +197,82 @@ def criar_servidor() -> MCPServer:
         description="Cria uma reserva quando a sala esta livre.",
     )
     def reservar_sala(
-        sala: str, inicio: str, fim: str, responsavel: str
-    ) -> ResultadoReserva:
+        sala: str, inicio: str, fim: str, responsavel: str, ctx: Context
+    ) -> ResultadoReserva | InputRequiredResult:
         nonlocal proximo_numero_reserva
+        if ctx.request_state is not None:
+            try:
+                selado = json.loads(ctx.request_state)
+            except (TypeError, json.JSONDecodeError) as erro:
+                raise MCPError(
+                    code=INVALID_PARAMS,
+                    message="Invalid or expired requestState",
+                ) from erro
+
+            chave = selado.get("inputKey")
+            alternativas = selado.get("alternativas")
+            resposta_input = (ctx.input_responses or {}).get(chave)
+            if (
+                not isinstance(chave, str)
+                or not isinstance(alternativas, list)
+                or resposta_input is None
+            ):
+                raise MCPError(
+                    code=INVALID_PARAMS,
+                    message="Resposta de elicitation invalida",
+                )
+            if resposta_input.action in {"decline", "cancel"}:
+                return ResultadoReserva(
+                    reserva=None,
+                    reservado=False,
+                    sala=None,
+                    inicio=None,
+                    fim=None,
+                    responsavel=None,
+                    politica=None,
+                    motivo="recusado",
+                )
+
+            sala_escolhida = (
+                resposta_input.content or {}
+            ).get("sala") if resposta_input.content is not None else None
+            if (
+                resposta_input.action != "accept"
+                or not isinstance(sala_escolhida, str)
+                or sala_escolhida not in alternativas
+            ):
+                raise MCPError(
+                    code=INVALID_PARAMS,
+                    message="Escolha fora das alternativas solicitadas",
+                )
+            inicio = selado["inicio"]
+            fim = selado["fim"]
+            responsavel = selado["responsavel"]
+            sala_validada = validar_sala(sala_escolhida, dominio.salas)
+            if reservas_em_conflito(sala_validada.id, inicio, fim, reservas):
+                raise ToolError(
+                    "A sala escolhida ficou ocupada antes da retomada"
+                )
+            reserva = Reserva(
+                id=f"res-{proximo_numero_reserva:04d}",
+                sala=sala_validada.id,
+                inicio=inicio,
+                fim=fim,
+                responsavel=responsavel,
+            )
+            proximo_numero_reserva += 1
+            reservas.append(reserva)
+            return ResultadoReserva(
+                reserva=reserva.id,
+                reservado=True,
+                sala=reserva.sala,
+                inicio=reserva.inicio,
+                fim=reserva.fim,
+                responsavel=reserva.responsavel,
+                politica=dominio.politica.versao,
+                motivo=None,
+            )
+
         try:
             sala_validada = validar_pedido(sala, inicio, fim, dominio.salas)
         except ErroDominio as erro:
@@ -198,7 +285,67 @@ def criar_servidor() -> MCPServer:
             )
             if not alternativas:
                 raise ToolError("Sem alternativas disponiveis no intervalo")
-            raise ToolError("A sala pedida esta ocupada nesse intervalo")
+            capabilities = ctx.client_capabilities
+            if (
+                capabilities is None
+                or capabilities.elicitation is None
+                or capabilities.elicitation.form is None
+            ):
+                data = MissingRequiredClientCapabilityErrorData(
+                    required_capabilities=ClientCapabilities(
+                        elicitation=ElicitationCapability(
+                            form=FormElicitationCapability()
+                        )
+                    )
+                )
+                raise MCPError(
+                    code=MISSING_REQUIRED_CLIENT_CAPABILITY,
+                    message="Client did not declare required elicitation form capability",
+                    data=data.model_dump(
+                        by_alias=True, mode="json", exclude_none=True
+                    ),
+                )
+            input_key = "escolha_de_sala"
+            ids_alternativas = [alternativa.id for alternativa in alternativas]
+            schema = {
+                "type": "object",
+                "properties": {
+                    "sala": {
+                        "type": "string",
+                        "title": "Sala",
+                        "description": "Sala alternativa escolhida",
+                    }
+                },
+                "required": ["sala"],
+            }
+            if len(ids_alternativas) == 1:
+                schema["properties"]["sala"]["const"] = ids_alternativas[0]
+            else:
+                schema["properties"]["sala"]["enum"] = ids_alternativas
+            pedido = ElicitRequest(
+                params=ElicitRequestFormParams(
+                    mode="form",
+                    message=(
+                        "A sala pedida esta ocupada nesse intervalo. "
+                        "Escolha uma alternativa."
+                    ),
+                    requested_schema=schema,
+                )
+            )
+            return InputRequiredResult(
+                input_requests={input_key: pedido},
+                request_state=json.dumps(
+                    {
+                        "sala": sala_validada.id,
+                        "inicio": inicio,
+                        "fim": fim,
+                        "responsavel": responsavel,
+                        "alternativas": ids_alternativas,
+                        "inputKey": input_key,
+                    },
+                    separators=(",", ":"),
+                ),
+            )
 
         reserva = Reserva(
             id=f"res-{proximo_numero_reserva:04d}",
