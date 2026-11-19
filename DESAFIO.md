@@ -332,58 +332,73 @@ Todos obrigatórios.
 
 **Servidor MCP**
 
-- [ ] Sobe na porta `7301` em Streamable HTTP e responde a `tools/list` com as três tools
-- [ ] Toda tool tem `inputSchema` que é um objeto JSON Schema válido
-- [ ] `listar_salas` devolve `structuredContent` conforme o `outputSchema` declarado e o mesmo JSON serializado em bloco de texto
-- [ ] Request sem `io.modelcontextprotocol/protocolVersion` ou sem `io.modelcontextprotocol/clientCapabilities` recebe `-32602` com HTTP `400`
-- [ ] `tools/call` de tool inexistente é recusado, por `-32602` ou por `isError`
-- [ ] `resources/read` de `politica://uso` devolve o conteúdo de `dados/politica-de-uso.md`, e de URI inexistente devolve `-32602`
-- [ ] Sala inexistente, janela violada, duração acima do limite e intervalo invertido devolvem `isError: true` com as mensagens exatas definidas neste enunciado
-- [ ] O stderr do processo registra método, id e `traceparent` de cada request
+- [x] Sobe na porta `7301` em Streamable HTTP e responde a `tools/list` com as três tools
+- [x] Toda tool tem `inputSchema` que é um objeto JSON Schema válido
+- [x] `listar_salas` devolve `structuredContent` conforme o `outputSchema` declarado e o mesmo JSON serializado em bloco de texto
+- [x] Request sem `io.modelcontextprotocol/protocolVersion` ou sem `io.modelcontextprotocol/clientCapabilities` recebe `-32602` com HTTP `400`
+- [x] `tools/call` de tool inexistente é recusado, por `-32602` ou por `isError`
+- [x] `resources/read` de `politica://uso` devolve o conteúdo de `dados/politica-de-uso.md`, e de URI inexistente devolve `-32602`
+- [x] Sala inexistente, janela violada, duração acima do limite e intervalo invertido devolvem `isError: true` com as mensagens exatas definidas neste enunciado
+- [x] O stderr do processo registra método, id e `traceparent` de cada request
 
 **MRTR**
 
-- [ ] Reserva em intervalo ocupado devolve `resultType` igual a `input_required`, com uma única entrada em `inputRequests`, em form mode, e um `requestState` presente
-- [ ] O `requestedSchema` é plano e restringe a escolha às alternativas calculadas pela regra do enunciado, na ordem definida
-- [ ] O mesmo pedido, vindo de cliente que não declarou elicitation em form mode, recebe `-32021` com `data.requiredCapabilities` e HTTP `400`
-- [ ] O retry com `inputResponses` e `requestState` conclui a reserva e devolve `resultType` igual a `complete`
-- [ ] `requestState` adulterado recebe `-32602`
-- [ ] Um retry com argumentos adulterados não produz reserva com os valores adulterados
-- [ ] Um retry com `requestState` válido conclui a reserva mesmo que o processo do servidor MCP tenha sido reiniciado entre o `input_required` e o retry
-- [ ] A chave de integridade vem de `REQUEST_STATE_SECRET`, com no mínimo 32 bytes, e não há segredo hardcoded no código
-- [ ] Recusa com `action` igual a `decline` conclui sem reservar e sem `isError`
+- [x] Reserva em intervalo ocupado devolve `resultType` igual a `input_required`, com uma única entrada em `inputRequests`, em form mode, e um `requestState` presente
+- [x] O `requestedSchema` é plano e restringe a escolha às alternativas calculadas pela regra do enunciado, na ordem definida
+- [x] O mesmo pedido, vindo de cliente que não declarou elicitation em form mode, recebe `-32021` com `data.requiredCapabilities` e HTTP `400`
+- [x] O retry com `inputResponses` e `requestState` conclui a reserva e devolve `resultType` igual a `complete`
+- [x] `requestState` adulterado recebe `-32602`
+- [x] Um retry com argumentos adulterados não produz reserva com os valores adulterados
+- [x] Um retry com `requestState` válido conclui a reserva mesmo que o processo do servidor MCP tenha sido reiniciado entre o `input_required` e o retry
+- [x] A chave de integridade vem de `REQUEST_STATE_SECRET`, com no mínimo 32 bytes, e não há segredo hardcoded no código
+- [x] Recusa com `action` igual a `decline` conclui sem reservar e sem `isError`
 
 **Agente como host MCP**
 
-- [ ] O log do servidor MCP mostra um `tools/list` antes do primeiro `tools/call` do agente
-- [ ] O log do servidor MCP mostra o `traceparent` com o mesmo trace-id enviado pelo validador no header da chamada A2A
-- [ ] Os requests do agente declaram a capability de elicitation em form mode
+- [x] O log do servidor MCP mostra um `tools/list` antes do primeiro `tools/call` do agente
+- [x] O log do servidor MCP mostra o `traceparent` com o mesmo trace-id enviado pelo validador no header da chamada A2A
+- [x] Os requests do agente declaram a capability de elicitation em form mode
 
 **Agente como servidor A2A**
 
-- [ ] `GET /.well-known/agent-card.json` responde 200 com um card v1.0 válido
-- [ ] O card declara a interface JSON-RPC com a URL do endpoint e a versão de protocolo `1.0`, e uma skill de `id` `reservar-sala`
-- [ ] `SendMessage` com sala livre termina a Task em `TASK_STATE_COMPLETED` com o artifact `reserva`
-- [ ] O artifact traz a reserva criada e o campo `politica` com o valor lido do resource
-- [ ] `GetTask` devolve `id`, `contextId`, estado corrente e o artifact quando existir
-- [ ] `SendMessage` referenciando Task em estado terminal é recusado com erro
-- [ ] `SendMessage` pedindo uma sala inexistente termina a Task em `TASK_STATE_FAILED`, com a mensagem exata da tool visível no histórico
+- [x] `GET /.well-known/agent-card.json` responde 200 com um card v1.0 válido
+- [x] O card declara a interface JSON-RPC com a URL do endpoint e a versão de protocolo `1.0`, e uma skill de `id` `reservar-sala`
+- [x] `SendMessage` com sala livre termina a Task em `TASK_STATE_COMPLETED` com o artifact `reserva`
+- [x] O artifact traz a reserva criada e o campo `politica` com o valor lido do resource
+- [x] `GetTask` devolve `id`, `contextId`, estado corrente e o artifact quando existir
+- [x] `SendMessage` referenciando Task em estado terminal é recusado com erro
+- [x] `SendMessage` pedindo uma sala inexistente termina a Task em `TASK_STATE_FAILED`, com a mensagem exata da tool visível no histórico
 
 **A ponte**
 
-- [ ] `SendMessage` pedindo sala ocupada deixa a Task em `TASK_STATE_INPUT_REQUIRED` com a linha `alternativas: ` listando os ids na ordem do `enum`
-- [ ] A continuação com `escolha=<id>` conclui a Task em `TASK_STATE_COMPLETED` com a reserva na sala escolhida
-- [ ] A continuação com `escolha=recusar` termina a Task em `TASK_STATE_CANCELED`
-- [ ] Escolha fora do `enum` mantém a Task em `TASK_STATE_INPUT_REQUIRED`
-- [ ] Duas Tasks pausadas ao mesmo tempo concluem cada uma com a sua reserva, sem trocar de `requestState`
-- [ ] O `requestState` não aparece em nenhuma resposta A2A
+- [x] `SendMessage` pedindo sala ocupada deixa a Task em `TASK_STATE_INPUT_REQUIRED` com a linha `alternativas: ` listando os ids na ordem do `enum`
+- [x] A continuação com `escolha=<id>` conclui a Task em `TASK_STATE_COMPLETED` com a reserva na sala escolhida
+- [x] A continuação com `escolha=recusar` termina a Task em `TASK_STATE_CANCELED`
+- [x] Escolha fora do `enum` mantém a Task em `TASK_STATE_INPUT_REQUIRED`
+- [x] Duas Tasks pausadas ao mesmo tempo concluem cada uma com a sua reserva, sem trocar de `requestState`
+- [x] O `requestState` não aparece em nenhuma resposta A2A
 
 **Validação e entrega**
 
-- [ ] `python3 validador/validar.py` passa nas 36 verificações, com os dois processos recém-iniciados, e termina com código de saída 0
-- [ ] `dados/`, `validador/` e `exemplos/` não foram alterados
-- [ ] O agente é determinístico: o mesmo pedido, enviado duas vezes, produz o mesmo resultado, e não há dependência de SDK de provedor de LLM no `package.json` ou no `pyproject.toml`
-- [ ] O README tem as quatro seções exigidas, e os comandos funcionam a partir de um clone limpo
+- [x] `python3 validador/validar.py` passa nas 36 verificações, com os dois processos recém-iniciados, e termina com código de saída 0
+- [x] `dados/`, `validador/` e `exemplos/` não foram alterados
+- [x] O agente é determinístico: o mesmo pedido, enviado duas vezes, produz o mesmo resultado, e não há dependência de SDK de provedor de LLM no `package.json` ou no `pyproject.toml`
+- [x] O README tem as quatro seções exigidas, e os comandos funcionam a partir de um clone limpo
+
+### Evidências da execução
+
+Execução realizada em 2026-11-19 com processos MCP e A2A recém-iniciados:
+
+- `pytest`: 54 testes passaram.
+- `validador/validar.py`: 36 passaram, 0 falharam, código de saída 0.
+- O stderr do MCP registrou `tools/list` com id 1 antes do primeiro
+  `tools/call` com id 3 emitido pelo agente.
+- O trace-id `d451545350ba1d05445a12a483958dce` emitido pelo validador
+  apareceu no `_meta` do MCP como o mesmo trace-id.
+- Os retries usam ids JSON-RPC monotonicamente novos.
+- Os diretórios protegidos `dados/`, `validador/` e `exemplos/` são idênticos
+  ao commit inicial.
+- Não há item pendente nos critérios de aceite.
 
 ## Fluxo do avaliador
 
